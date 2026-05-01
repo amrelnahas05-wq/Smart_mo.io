@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Da3poles – Mission Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --crimson:    #7a1040;
+    --gold:       #f0c040;
+    --gold-light: #fad96a;
+    --dark:       #0a0608;
+    --dark2:      #130a0e;
+    --mid:        #1e0e15;
+    --surface:    #280f1a;
+    --surface2:   #341525;
+    --text:       #f5e8ee;
+    --muted:      #9a7080;
+    --accent:     #ff2d6b;
+    --safe:       #3ec97a;
+    --danger:     #ff2d6b;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--dark);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    overflow-x: hidden;
+    min-height: 100dvh;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 1.2rem 3rem;
+    background: rgba(10,6,8,0.9);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(240,192,64,0.12);
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.8rem; letter-spacing: 4px;
+    color: var(--gold);
+  }
+  .logo span { color: var(--text); }
+
+  nav ul { display: flex; gap: 2.5rem; list-style: none; }
+  nav ul a {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--muted);
+    text-decoration: none; transition: color 0.2s;
+  }
+  nav ul a:hover { color: var(--gold); }
+
+  /* Status pill */
+  .status-pill {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s, box-shadow 0.3s;
+    flex-shrink: 0;
+  }
+  .status-dot.online  { background: var(--safe);   box-shadow: 0 0 10px var(--safe); }
+  .status-dot.offline { background: var(--muted); box-shadow: none; }
+  .status-dot.warn    { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+
+  /* ── PAGE HEADER ── */
+  .page-header {
+    padding: 8rem 3rem 3rem;
+    position: relative; overflow: hidden;
+  }
+  .page-header::before {
+    content: '';
+    position: absolute; top: -10%; left: -5%;
+    width: 55%; height: 80%;
+    background: radial-gradient(ellipse at 30% 40%, rgba(122,16,64,0.45) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .page-header-inner { position: relative; z-index: 2; }
+  .section-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem; letter-spacing: 4px;
+    text-transform: uppercase; color: var(--gold);
+    margin-bottom: 0.8rem;
+  }
+  .page-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(3rem, 7vw, 6rem);
+    line-height: 0.92; letter-spacing: 2px;
+  }
+  .page-title .gold { color: var(--gold); }
+  .page-sub {
+    font-size: 0.88rem; color: var(--muted);
+    margin-top: 1rem; line-height: 1.7; max-width: 520px;
+  }
+
+  /* ── TICKER ── */
+  .ticker {
+    background: var(--crimson);
+    padding: 0.9rem 0;
+    overflow: hidden; white-space: nowrap;
+  }
+  .ticker-inner {
+    display: inline-flex; gap: 4rem;
+    animation: scroll 22s linear infinite;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.9rem; letter-spacing: 4px;
+    color: rgba(255,255,255,0.65);
+  }
+  .ticker-inner span { color: var(--gold); }
+
+  /* ── MAIN GRID ── */
+  .ctrl-wrap {
+    padding: 3rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* ── TELEMETRY BAR ── */
+  .telem-bar {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: rgba(240,192,64,0.1);
+    border: 1px solid rgba(240,192,64,0.1);
+  }
+  .telem-cell {
+    background: var(--dark2);
+    padding: 1.2rem 1.5rem;
+    text-align: center;
+  }
+  .telem-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.58rem; letter-spacing: 3px;
+    text-transform: uppercase; color: var(--muted);
+    margin-bottom: 0.4rem;
+  }
+  .telem-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6rem; letter-spacing: 2px; color: var(--gold);
+    transition: color 0.3s;
+  }
+  .telem-value.safe    { color: var(--safe); }
+  .telem-value.danger  { color: var(--danger); }
+  .telem-value.crimson { color: #d44080; }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--dark2);
+    border: 1px solid rgba(240,192,64,0.1);
+    padding: 2rem 1.8rem;
+    position: relative; overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .card::before {
+    content: ''; position: absolute;
+    top: 0; left: 0; right: 0; height: 2px;
+    background: var(--gold);
+    transform: scaleX(0); transform-origin: left;
+    transition: transform 0.4s ease;
+  }
+  .card:hover { border-color: rgba(240,192,64,0.22); }
+  .card:hover::before { transform: scaleX(1); }
+  .card:has(.active-card) { border-color: rgba(240,192,64,0.3); }
+
+  .card-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3rem; letter-spacing: 3px;
+    color: var(--gold); margin-bottom: 0.3rem;
+  }
+  .card-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; letter-spacing: 2px;
+    color: var(--muted); margin-bottom: 1.8rem;
+    text-transform: uppercase;
+  }
+
+  /* ── D-PAD ── */
+  .card-dpad { grid-row: span 2; }
+
+  .dpad-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
+    gap: 10px;
+    width: 100%; max-width: 260px;
+    margin: 0 auto;
+  }
+  .dpad-grid > * { aspect-ratio: 1; }
+
+  .cbtn {
+    background: var(--surface);
+    border: 1px solid rgba(240,192,64,0.15);
+    color: var(--gold);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6rem; letter-spacing: 1px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.1s;
+    user-select: none; -webkit-user-select: none;
+    width: 100%; height: 100%;
+    position: relative; overflow: hidden;
+  }
+  .cbtn::after {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle at center, rgba(240,192,64,0.08), transparent 70%);
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .cbtn:hover::after { opacity: 1; }
+  .cbtn:active, .cbtn.pressed {
+    background: rgba(122,16,64,0.4);
+    border-color: var(--gold);
+    box-shadow: 0 0 20px rgba(240,192,64,0.2), inset 0 0 10px rgba(240,192,64,0.05);
+    transform: scale(0.91);
+  }
+
+  .cbtn-stop {
+    color: var(--danger); border-color: rgba(255,45,107,0.2);
+    font-size: 0.85rem;
+  }
+  .cbtn-stop:active, .cbtn-stop.pressed {
+    background: rgba(255,45,107,0.2);
+    border-color: var(--danger);
+    box-shadow: 0 0 20px rgba(255,45,107,0.3);
+  }
+
+  #btn-F { grid-column: 2; grid-row: 1; }
+  #btn-L { grid-column: 1; grid-row: 2; }
+  #btn-X { grid-column: 2; grid-row: 2; }
+  #btn-R { grid-column: 3; grid-row: 2; }
+  #btn-B { grid-column: 2; grid-row: 3; }
+
+  .key-hint {
+    text-align: center; margin-top: 1.4rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; color: var(--muted); letter-spacing: 2px;
+  }
+  .key-hint span {
+    display: inline-block;
+    border: 1px solid rgba(240,192,64,0.2);
+    padding: 0.15rem 0.4rem;
+    color: var(--gold); margin: 0 2px;
+  }
+
+  /* ── MOTOR CONTROLS ── */
+  .motor-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin-bottom: 1.4rem;
+  }
+
+  .mbtn {
+    background: var(--surface);
+    border: 1px solid rgba(240,192,64,0.12);
+    color: var(--gold);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem; letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 0.85rem 0.5rem;
+    cursor: pointer; border-radius: 3px;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    user-select: none;
+  }
+  .mbtn:hover { background: rgba(240,192,64,0.08); border-color: rgba(240,192,64,0.3); }
+  .mbtn:active, .mbtn.active {
+    background: rgba(122,16,64,0.5);
+    border-color: var(--gold);
+    box-shadow: 0 0 16px rgba(240,192,64,0.15);
+    transform: scale(0.97);
+  }
+  .mbtn.motor-on {
+    background: rgba(122,16,64,0.4);
+    border-color: rgba(240,192,64,0.5);
+    box-shadow: 0 0 12px rgba(240,192,64,0.1);
+  }
+  .mbtn-off { color: var(--muted); border-color: rgba(154,112,128,0.15); }
+  .mbtn-off:hover { border-color: rgba(154,112,128,0.3); background: rgba(154,112,128,0.06); }
+  .mbtn-off:active { background: rgba(154,112,128,0.15); border-color: var(--muted); box-shadow: none; }
+
+  /* Speed slider */
+  .spd-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 6px;
+  }
+  .spd-label-txt {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; letter-spacing: 2px; color: var(--muted);
+    text-transform: uppercase;
+  }
+  .spd-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem; letter-spacing: 2px; color: var(--gold-light);
+  }
+  input[type=range] {
+    width: 100%; height: 4px;
+    appearance: none; -webkit-appearance: none;
+    background: rgba(240,192,64,0.15); border-radius: 2px; cursor: pointer;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 8px rgba(240,192,64,0.4);
+    cursor: pointer; transition: transform 0.15s;
+  }
+  input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.2); }
+  .spd-ticks {
+    display: flex; justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem; color: var(--muted); margin-top: 4px;
+    letter-spacing: 1px;
+  }
+
+  /* ── SWEEP CARD ── */
+  .sweep-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.2rem; }
+
+  .inp-group label {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.58rem; letter-spacing: 2px;
+    color: var(--muted); text-transform: uppercase; margin-bottom: 6px;
+  }
+  .inp-group input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid rgba(240,192,64,0.15);
+    border-radius: 3px; color: var(--gold);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem; padding: 0.7rem 1rem;
+    outline: none; transition: border-color 0.2s;
+  }
+  .inp-group input:focus { border-color: rgba(240,192,64,0.5); }
+  .inp-group input::placeholder { color: rgba(154,112,128,0.5); }
+
+  .btn-sweep {
+    width: 100%; padding: 0.9rem;
+    background: linear-gradient(135deg, rgba(122,16,64,0.5), rgba(122,16,64,0.2));
+    border: 1px solid rgba(240,192,64,0.3);
+    color: var(--gold);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem; letter-spacing: 3px;
+    cursor: pointer; border-radius: 2px;
+    transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+  }
+  .btn-sweep:hover {
+    background: linear-gradient(135deg, rgba(122,16,64,0.7), rgba(122,16,64,0.4));
+    box-shadow: 0 0 24px rgba(122,16,64,0.4);
+  }
+  .btn-sweep:active { transform: scale(0.98); }
+  .btn-sweep.sweeping {
+    background: rgba(122,16,64,0.6);
+    border-color: var(--gold);
+    box-shadow: 0 0 20px rgba(240,192,64,0.15);
+    animation: pulse-btn 1.5s ease infinite;
+  }
+
+  /* Sweep progress */
+  .sweep-info {
+    margin-top: 1rem; display: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem; color: var(--muted); letter-spacing: 1px;
+    text-align: center;
+  }
+  .sweep-info.visible { display: block; }
+  .sweep-bar-track {
+    width: 100%; height: 3px; background: rgba(240,192,64,0.1);
+    margin-top: 8px; border-radius: 2px; overflow: hidden;
+  }
+  .sweep-bar-fill {
+    height: 100%; background: var(--gold);
+    width: 0%; border-radius: 2px;
+    transition: width 0.5s ease;
+    box-shadow: 0 0 6px rgba(240,192,64,0.4);
+  }
+
+  /* ── LOG CARD ── */
+  .card-log { grid-column: 1 / -1; }
+
+  #log {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem; color: var(--muted);
+    line-height: 1.8; max-height: 120px;
+    overflow-y: auto; padding: 1rem;
+    background: var(--dark); border: 1px solid rgba(240,192,64,0.08);
+    border-radius: 2px;
+  }
+  #log .ok   { color: var(--safe); }
+  #log .err  { color: var(--danger); }
+  #log .info { color: var(--gold); }
+  #log .warn { color: var(--gold-light); }
+  #log::-webkit-scrollbar { width: 3px; }
+  #log::-webkit-scrollbar-thumb { background: rgba(240,192,64,0.2); }
+
+  /* ── OBSTACLE ALERT BANNER ── */
+  #obs-banner {
+    display: none; grid-column: 1 / -1;
+    background: rgba(255,45,107,0.08);
+    border: 1px solid rgba(255,45,107,0.3);
+    padding: 1rem 1.5rem;
+    display: none; align-items: center; gap: 1rem;
+  }
+  #obs-banner.visible { display: flex; }
+  .obs-badge {
+    background: var(--danger);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.9rem; letter-spacing: 3px;
+    color: var(--text); padding: 0.2rem 0.8rem;
+    flex-shrink: 0;
+  }
+  .obs-msg {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem; letter-spacing: 1px; color: var(--danger);
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    background: var(--dark2);
+    border-top: 1px solid rgba(240,192,64,0.12);
+    padding: 2rem 3rem;
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 2rem;
+  }
+  .footer-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem; letter-spacing: 4px; color: var(--gold);
+  }
+  .footer-logo span { color: rgba(245,232,238,0.35); }
+  .footer-copy {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; color: var(--muted); letter-spacing: 1px;
+  }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(240,192,64,0.2), transparent);
+    margin: 0.8rem 0;
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes scroll { to { transform: translateX(-50%); } }
+  @keyframes pulse-btn {
+    0%, 100% { box-shadow: 0 0 20px rgba(240,192,64,0.15); }
+    50%       { box-shadow: 0 0 32px rgba(240,192,64,0.35); }
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+  .obs-badge { animation: blink 1s step-end infinite; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 860px) {
+    nav ul { display: none; }
+    nav { padding: 1rem 1.5rem; }
+    .page-header { padding: 7rem 1.5rem 2rem; }
+    .ctrl-wrap { padding: 1.5rem; grid-template-columns: 1fr; gap: 1.2rem; }
+    .telem-bar { grid-template-columns: repeat(2,1fr); }
+    .card-dpad { grid-row: span 1; }
+    footer { flex-direction: column; gap: 1rem; text-align: center; }
+  }
+  @media (max-width: 480px) {
+    .telem-bar { grid-template-columns: 1fr 1fr; }
+    .dpad-grid { max-width: 210px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">Da3poles<span>™</span></div>
+  <ul>
+    <li><a href="smartmow.html">Home</a></li>
+    <li><a href="smartmow.html#features">Features</a></li>
+    <li><a href="smartmow.html#specs">Specs</a></li>
+    <li><a href="smartmow.html#safety">Safety</a></li>
+  </ul>
+  <div class="status-pill">
+    <div class="status-dot offline" id="status-dot"></div>
+    <span id="status-text">CONNECTING</span>
+  </div>
+</nav>
+
+<!-- PAGE HEADER -->
+<div class="page-header">
+  <div class="page-header-inner">
+    <div class="section-tag">// live command interface</div>
+    <h1 class="page-title">Mission<br><span class="gold">Control</span></h1>
+    <p class="page-sub">Real-time control interface for the Da3poles autonomous mower. Connect your device to <strong style="color:var(--gold);">ESP32_Rover</strong> WiFi, then use the controls below.</p>
+  </div>
+</div>
+
+<!-- TICKER -->
+<div class="ticker">
+  <div class="ticker-inner">
+    <span>LIVE</span> TELEMETRY &nbsp;·&nbsp; <span>REAL-TIME</span> COMMAND &nbsp;·&nbsp; <span>OBSTACLE</span> DETECTION &nbsp;·&nbsp; <span>AREA</span> SWEEP &nbsp;·&nbsp; <span>BLADE</span> CONTROL &nbsp;·&nbsp;
+    <span>LIVE</span> TELEMETRY &nbsp;·&nbsp; <span>REAL-TIME</span> COMMAND &nbsp;·&nbsp; <span>OBSTACLE</span> DETECTION &nbsp;·&nbsp; <span>AREA</span> SWEEP &nbsp;·&nbsp; <span>BLADE</span> CONTROL &nbsp;·&nbsp;
+  </div>
+</div>
+
+<!-- MAIN CONTROL WRAP -->
+<div class="ctrl-wrap">
+
+  <!-- TELEMETRY BAR -->
+  <div class="telem-bar">
+    <div class="telem-cell">
+      <div class="telem-label">Connection</div>
+      <div class="telem-value" id="t-conn">OFFLINE</div>
+    </div>
+    <div class="telem-cell">
+      <div class="telem-label">Last Command</div>
+      <div class="telem-value" id="t-cmd">--</div>
+    </div>
+    <div class="telem-cell">
+      <div class="telem-label">Obstacle</div>
+      <div class="telem-value safe" id="t-obs">CLEAR</div>
+    </div>
+    <div class="telem-cell">
+      <div class="telem-label">Mode</div>
+      <div class="telem-value" id="t-mode">MANUAL</div>
+    </div>
+  </div>
+
+  <!-- OBSTACLE BANNER -->
+  <div id="obs-banner">
+    <div class="obs-badge">⚠ OBSTACLE</div>
+    <div class="obs-msg">Obstacle detected — mower halted. Clear the path to resume.</div>
+  </div>
+
+  <!-- D-PAD CARD -->
+  <div class="card card-dpad" style="animation: fadeUp 0.6s 0.1s ease both; opacity:0;">
+    <div class="card-title">Directional Control</div>
+    <div class="card-sub">// press & hold to move · auto-stops on release</div>
+
+    <div class="dpad-grid">
+      <button class="cbtn" id="btn-F" data-cmd="F" aria-label="Forward">▲</button>
+      <button class="cbtn" id="btn-L" data-cmd="L" aria-label="Left">◀</button>
+      <button class="cbtn cbtn-stop" id="btn-X" data-cmd="X" aria-label="Stop">STOP</button>
+      <button class="cbtn" id="btn-R" data-cmd="R" aria-label="Right">▶</button>
+      <button class="cbtn" id="btn-B" data-cmd="B" aria-label="Backward">▼</button>
+    </div>
+
+    <div class="key-hint">
+      <span>↑</span><span>↓</span><span>←</span><span>→</span> Arrow keys &nbsp;·&nbsp; <span>SPACE</span> Stop
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN -->
+  <div style="display:flex; flex-direction:column; gap:1.5rem;">
+
+    <!-- BLADE MOTOR CARD -->
+    <div class="card" style="animation: fadeUp 0.6s 0.2s ease both; opacity:0;">
+      <div class="card-title">Blade Motor</div>
+      <div class="card-sub">// motor x — cutting blade</div>
+      <div class="motor-row">
+        <button class="mbtn" id="btn-V" data-cmd="V">⚙ On</button>
+        <button class="mbtn mbtn-off" id="btn-P" data-cmd="P">◼ Off</button>
+      </div>
+      <div class="spd-header">
+        <span class="spd-label-txt">Blade Speed</span>
+        <span class="spd-val" id="spd-val">100%</span>
+      </div>
+      <input type="range" id="spd-slider" min="0" max="255" value="255" aria-label="Blade speed">
+      <div class="spd-ticks"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+    </div>
+
+    <!-- MOTOR 3 CARD -->
+    <div class="card" style="animation: fadeUp 0.6s 0.3s ease both; opacity:0;">
+      <div class="card-title">Motor 3</div>
+      <div class="card-sub">// motor y — auxiliary drive</div>
+      <div class="motor-row">
+        <button class="mbtn" id="btn-V2" data-cmd="V2">⚙ On</button>
+        <button class="mbtn mbtn-off" id="btn-P2" data-cmd="P2">◼ Off</button>
+      </div>
+      <div class="spd-header">
+        <span class="spd-label-txt">Motor 3 Speed</span>
+        <span class="spd-val" id="spd2-val">100%</span>
+      </div>
+      <input type="range" id="spd2-slider" min="0" max="255" value="255" aria-label="Motor 3 speed">
+      <div class="spd-ticks"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+    </div>
+
+  </div>
+
+  <!-- AREA SWEEP CARD -->
+  <div class="card" style="animation: fadeUp 0.6s 0.35s ease both; opacity:0; grid-column: 1;">
+    <div class="card-title">Area Sweep</div>
+    <div class="card-sub">// autonomous grid mowing pattern</div>
+
+    <div class="sweep-grid">
+      <div class="inp-group">
+        <label>Length (cm)</label>
+        <input type="number" id="inp-length" placeholder="e.g. 200" min="1">
+      </div>
+      <div class="inp-group">
+        <label>Width (cm)</label>
+        <input type="number" id="inp-width" placeholder="e.g. 150" min="1">
+      </div>
+    </div>
+
+    <button class="btn-sweep" id="btn-sweep">▶ &nbsp;START SWEEP</button>
+
+    <div class="sweep-info" id="sweep-info">
+      <span id="sweep-msg">Calculating coverage…</span>
+      <div class="sweep-bar-track"><div class="sweep-bar-fill" id="sweep-fill"></div></div>
+    </div>
+  </div>
+
+  <!-- STATUS / LOG CARD -->
+  <div class="card" style="animation: fadeUp 0.6s 0.4s ease both; opacity:0; grid-column: 2;">
+    <div class="card-title">System Log</div>
+    <div class="card-sub">// command &amp; telemetry feed</div>
+    <div id="log"><span class="info">// Waiting for ESP32 connection at 192.168.4.1...</span></div>
+    <div class="divider" style="margin-top:1rem;"></div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.8rem;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--muted); letter-spacing:1px;">SSID: ESP32_Rover · PASS: rover1234 · IP: 192.168.4.1</span>
+      <button onclick="document.getElementById('log').innerHTML='<span class=\'info\'>// Log cleared.</span>';" style="background:none;border:1px solid rgba(240,192,64,0.15);color:var(--muted);font-family:\'JetBrains Mono\',monospace;font-size:0.58rem;letter-spacing:1px;padding:0.25rem 0.7rem;cursor:pointer;transition:border-color 0.2s,color 0.2s;" onmouseover="this.style.borderColor='rgba(240,192,64,0.4)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='rgba(240,192,64,0.15)';this.style.color='var(--muted)'">CLEAR</button>
+    </div>
+  </div>
+
+</div><!-- /ctrl-wrap -->
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">Da3poles<span>™</span></div>
+  <div class="footer-copy">© 2025 Team Da3poles · Cairo University · Faculty of Engineering</div>
+  <div class="footer-copy" style="text-align:right;">Supervised by Dr. Amr Rabie &amp; Dr. Gehan</div>
+</footer>
+
+<script>
+// =============================================================================
+//  CONFIG
+// =============================================================================
+const BASE = 'http://192.168.4.1';   // ESP32 IP
+let holdTimer  = null;
+let sliderT    = null;
+let slider2T   = null;
+let bladeOn    = false;
+let motor3On   = false;
+let sweeping   = false;
+
+// =============================================================================
+//  CORE FETCH
+// =============================================================================
+async function send(cmd) {
+  try {
+    const r = await fetch(`${BASE}/cmd?v=${encodeURIComponent(cmd)}`, { signal: AbortSignal.timeout(3000) });
+    const t = await r.text();
+    logMsg(t.startsWith('OK') ? `<span class="ok">${t}</span>` : `<span class="err">${t}</span>`);
+    return t;
+  } catch(e) {
+    logMsg(`<span class="err">ERR: ${e.message || 'connection failed'}</span>`);
+    setOffline();
+  }
+}
+
+async function sendSpeed(val) {
+  try {
+    await fetch(`${BASE}/speed?v=${val}`, { signal: AbortSignal.timeout(2000) });
+  } catch(_) {}
+}
+
+async function sendSpeed2(val) {
+  try {
+    await fetch(`${BASE}/speed2?v=${val}`, { signal: AbortSignal.timeout(2000) });
+  } catch(_) {}
+}
+
+// =============================================================================
+//  STATUS POLLING
+// =============================================================================
+async function pollStatus() {
+  try {
+    const r = await fetch(`${BASE}/status`, { signal: AbortSignal.timeout(2500) });
+    const d = await r.json();
+
+    // Connection
+    document.getElementById('status-dot').className = 'status-dot ' + (d.obstacle ? 'warn' : 'online');
+    document.getElementById('status-text').textContent = d.obstacle ? 'OBSTACLE' : 'ONLINE';
+    document.getElementById('t-conn').textContent = 'ONLINE';
+    document.getElementById('t-conn').className = 'telem-value safe';
+
+    // Last command
+    const tc = document.getElementById('t-cmd');
+    const cmdMap = { F:'FWD', B:'REV', L:'LEFT', R:'RIGHT', X:'STOP', V:'BLADE+', P:'BLADE-', V2:'MOT3+', P2:'MOT3-' };
+    tc.textContent = cmdMap[d.last_cmd] || (d.last_cmd || '--');
+    tc.className = 'telem-value';
+
+    // Obstacle
+    const obs = d.obstacle;
+    const obsEl = document.getElementById('t-obs');
+    obsEl.textContent = obs ? 'BLOCKED' : 'CLEAR';
+    obsEl.className   = 'telem-value ' + (obs ? 'danger' : 'safe');
+    document.getElementById('obs-banner').classList.toggle('visible', obs);
+
+    // Mode
+    const mode = document.getElementById('t-mode');
+    mode.textContent  = d.area_mode ? 'SWEEP' : 'MANUAL';
+    mode.className    = 'telem-value ' + (d.area_mode ? 'crimson' : '');
+
+    // Sweep button state
+    if (!d.area_mode && sweeping) {
+      sweeping = false;
+      document.getElementById('btn-sweep').classList.remove('sweeping');
+      document.getElementById('btn-sweep').textContent = '▶  START SWEEP';
+      const info = document.getElementById('sweep-info');
+      info.classList.remove('visible');
+      logMsg('<span class="ok">OK: sweep completed</span>');
+    }
+
+  } catch(e) {
+    setOffline();
+  }
+}
+
+function setOffline() {
+  document.getElementById('status-dot').className = 'status-dot offline';
+  document.getElementById('status-text').textContent = 'OFFLINE';
+  document.getElementById('t-conn').textContent = 'OFFLINE';
+  document.getElementById('t-conn').className = 'telem-value danger';
+}
+
+setInterval(pollStatus, 1000);
+pollStatus();
+
+// =============================================================================
+//  LOG
+// =============================================================================
+function logMsg(html) {
+  const el  = document.getElementById('log');
+  const ts  = new Date().toLocaleTimeString('en-GB', { hour12: false });
+  el.innerHTML += `<br><span style="color:rgba(154,112,128,0.6)">[${ts}]</span> ${html}`;
+  el.scrollTop  = el.scrollHeight;
+}
+
+// =============================================================================
+//  D-PAD — PRESS & HOLD
+// =============================================================================
+function startCmd(cmd, el) {
+  el.classList.add('pressed');
+  send(cmd);
+  holdTimer = setInterval(() => send(cmd), 280);
+}
+
+function stopCmd(el) {
+  el.classList.remove('pressed');
+  clearInterval(holdTimer); holdTimer = null;
+  const cmd = el.dataset.cmd;
+  if (['F','B','L','R'].includes(cmd)) send('X');
+}
+
+document.querySelectorAll('.cbtn[data-cmd]').forEach(btn => {
+  const cmd = btn.dataset.cmd;
+  btn.addEventListener('touchstart', e => { e.preventDefault(); startCmd(cmd, btn); }, { passive: false });
+  btn.addEventListener('touchend',   e => { e.preventDefault(); stopCmd(btn); });
+  btn.addEventListener('touchcancel',e => { e.preventDefault(); stopCmd(btn); });
+  btn.addEventListener('mousedown',  ()  => startCmd(cmd, btn));
+  btn.addEventListener('mouseup',    ()  => stopCmd(btn));
+  btn.addEventListener('mouseleave', ()  => { if (holdTimer) stopCmd(btn); });
+});
+
+// STOP button: don't re-send X on release
+const stopBtnEl = document.getElementById('btn-X');
+['mouseup','touchend'].forEach(ev => {
+  stopBtnEl.addEventListener(ev, e => {
+    clearInterval(holdTimer); holdTimer = null;
+    stopBtnEl.classList.remove('pressed');
+  });
+});
+
+// =============================================================================
+//  KEYBOARD
+// =============================================================================
+const keyMap  = { ArrowUp:'F', ArrowDown:'B', ArrowLeft:'L', ArrowRight:'R', ' ':'X' };
+const keyHeld = {};
+
+document.addEventListener('keydown', e => {
+  const cmd = keyMap[e.key];
+  if (!cmd || keyHeld[e.key]) return;
+  e.preventDefault();
+  keyHeld[e.key] = true;
+  const btn = document.querySelector(`.cbtn[data-cmd="${cmd}"]`);
+  if (btn) startCmd(cmd, btn);
+});
+
+document.addEventListener('keyup', e => {
+  const cmd = keyMap[e.key];
+  if (!cmd) return;
+  keyHeld[e.key] = false;
+  const btn = document.querySelector(`.cbtn[data-cmd="${cmd}"]`);
+  if (btn) stopCmd(btn);
+});
+
+// =============================================================================
+//  MOTOR BUTTONS
+// =============================================================================
+document.getElementById('btn-V').addEventListener('click', () => {
+  send('V');
+  bladeOn = true;
+  document.getElementById('btn-V').classList.add('motor-on');
+  document.getElementById('btn-P').classList.remove('motor-on');
+});
+document.getElementById('btn-P').addEventListener('click', () => {
+  send('P');
+  bladeOn = false;
+  document.getElementById('btn-P').classList.add('motor-on');
+  document.getElementById('btn-V').classList.remove('motor-on');
+  setTimeout(() => document.getElementById('btn-P').classList.remove('motor-on'), 600);
+});
+document.getElementById('btn-V2').addEventListener('click', () => {
+  send('V2');
+  motor3On = true;
+  document.getElementById('btn-V2').classList.add('motor-on');
+  document.getElementById('btn-P2').classList.remove('motor-on');
+});
+document.getElementById('btn-P2').addEventListener('click', () => {
+  send('P2');
+  motor3On = false;
+  document.getElementById('btn-P2').classList.add('motor-on');
+  document.getElementById('btn-V2').classList.remove('motor-on');
+  setTimeout(() => document.getElementById('btn-P2').classList.remove('motor-on'), 600);
+});
+
+// =============================================================================
+//  SPEED SLIDERS
+// =============================================================================
+const spdSlider = document.getElementById('spd-slider');
+const spdVal    = document.getElementById('spd-val');
+spdSlider.addEventListener('input', () => {
+  spdVal.textContent = Math.round(spdSlider.value / 255 * 100) + '%';
+  clearTimeout(sliderT);
+  sliderT = setTimeout(() => sendSpeed(spdSlider.value), 80);
+});
+
+const spd2Slider = document.getElementById('spd2-slider');
+const spd2Val    = document.getElementById('spd2-val');
+spd2Slider.addEventListener('input', () => {
+  spd2Val.textContent = Math.round(spd2Slider.value / 255 * 100) + '%';
+  clearTimeout(slider2T);
+  slider2T = setTimeout(() => sendSpeed2(spd2Slider.value), 80);
+});
+
+// =============================================================================
+//  AREA SWEEP
+// =============================================================================
+document.getElementById('btn-sweep').addEventListener('click', async () => {
+  if (sweeping) {
+    // Stop sweep
+    await send('X');
+    sweeping = false;
+    document.getElementById('btn-sweep').classList.remove('sweeping');
+    document.getElementById('btn-sweep').textContent = '▶  START SWEEP';
+    document.getElementById('sweep-info').classList.remove('visible');
+    return;
+  }
+
+  const l = parseInt(document.getElementById('inp-length').value);
+  const w = parseInt(document.getElementById('inp-width').value);
+  if (!l || !w || l < 1 || w < 1) {
+    logMsg('<span class="err">ERR: enter valid length and width in cm</span>');
+    return;
+  }
+
+  await send(`Kl${l}`);
+  await send(`Kw${w}`);
+
+  sweeping = true;
+  document.getElementById('btn-sweep').classList.add('sweeping');
+  document.getElementById('btn-sweep').textContent = '⏹ &nbsp;STOP SWEEP';
+
+  const info = document.getElementById('sweep-info');
+  const msg  = document.getElementById('sweep-msg');
+  const fill = document.getElementById('sweep-fill');
+  info.classList.add('visible');
+
+  const lanes   = Math.max(1, Math.floor(l / 30));
+  const totalMs = lanes * (w / 20 * 1000) + lanes * 750 * 2;
+  msg.textContent = `Sweeping ${l}cm × ${w}cm — ${lanes} lanes`;
+
+  logMsg(`<span class="info">// sweep started — ${l}cm × ${w}cm — ${lanes} lanes</span>`);
+
+  const startTime = Date.now();
+  const bar = setInterval(() => {
+    if (!sweeping) { clearInterval(bar); fill.style.width = '0%'; return; }
+    const pct = Math.min(100, ((Date.now() - startTime) / totalMs) * 100);
+    fill.style.width = pct + '%';
+    if (pct >= 100) clearInterval(bar);
+  }, 500);
+});
+</script>
+</body>
+</html>
